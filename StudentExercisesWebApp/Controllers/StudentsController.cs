@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using StudentExercisesWebApp.Models;
+using StudentExercisesWebApp.Models.ViewModels;
 //using StudentExercisesWebApp.ViewModels;
 
 
@@ -112,16 +113,39 @@ namespace StudentExercisesWebApp.Controllers
         //GET: Students/Create
         public ActionResult Create()
         {
-            return View();
+            // Create a new instance of a CreateStudentViewModel
+            // If we want to get all the cohorts, we need to use the constructor that's expecting a connection string. 
+            // When we create this instance, the constructor will run and get all the cohorts.
+            CreateStudentViewModel studentViewModel = new CreateStudentViewModel(_config.GetConnectionString("DefaultConnection"));
+
+            // Once we've created it, we can pass it to the view
+            return View(studentViewModel);
         }
 
         // POST: Students/Create
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<ActionResult> Create(Student student)
+        public async Task<ActionResult> Create(CreateStudentViewModel model)
         {
-            return View();
+            using (SqlConnection conn = Connection)
+            {
+                conn.Open();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"INSERT INTO Student
+                ( FirstName, LastName, SlackHandle, CohortId )
+                VALUES
+                ( @firstName, @lastName, @slackHandle, @cohortId )";
+                    cmd.Parameters.Add(new SqlParameter("@firstName", model.student.FirstName));
+                    cmd.Parameters.Add(new SqlParameter("@lastName", model.student.LastName));
+                    cmd.Parameters.Add(new SqlParameter("@slackHandle", model.student.SlackHandle));
+                    cmd.Parameters.Add(new SqlParameter("@cohortId", model.student.CohortId));
+                    cmd.ExecuteNonQuery();
+
+                    return RedirectToAction(nameof(Index));
+                }
+            }
         }
 
         // GET: Students/Edit/5
@@ -249,26 +273,15 @@ namespace StudentExercisesWebApp.Controllers
                     conn.Open();
                     using (SqlCommand cmd = conn.CreateCommand())
                     {
-                        cmd.CommandText = @"DELETE FROM StudentExercise WHERE studentId = @id";
+                        cmd.CommandText = @"DELETE FROM StudentExercise WHERE studentId = @id
+                        DELETE FROM Student WHERE Id = @id";
                         cmd.Parameters.Add(new SqlParameter("@id", id));
 
                         int rowsAffected = cmd.ExecuteNonQuery();
 
                     }
                 }
-                using (SqlConnection conn = Connection)
-                {
-                    conn.Open();
-                    using (SqlCommand cmd = conn.CreateCommand())
-                    {
-                        cmd.CommandText = @"DELETE FROM Student WHERE Id = @id";
-                        cmd.Parameters.Add(new SqlParameter("@id", id));
-
-                        int rowsAffected = cmd.ExecuteNonQuery();
-
-                    }
-                }
-
+             
                 return RedirectToAction(nameof(Index));
             }
             catch
