@@ -16,5 +16,8 @@ namespace StudentExercisesWebApp.Models
         public string SlackHandle { get; set; }
 
         public int CohortId { get; set; }
+
+        public List<Exercise> AssignedExercises { get; set; } = new List<Exercise>();
+
     }
 }

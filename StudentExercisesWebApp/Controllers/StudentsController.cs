@@ -149,40 +149,14 @@ namespace StudentExercisesWebApp.Controllers
         }
 
         // GET: Students/Edit/5
-        public ActionResult Edit(int id)
+        public ActionResult Edit(int studentId)
         {
-            using (SqlConnection conn = Connection)
-            {
-                conn.Open();
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = @"
-                        SELECT
-                            Id, FirstName, LastName, SlackHandle, CohortId
-                        FROM Student
-                        WHERE Id = @id";
-                    cmd.Parameters.Add(new SqlParameter("@id", id));
-                    SqlDataReader reader = cmd.ExecuteReader();
+            // Create a new instance of a StudentEditViewModel
+            // Pass it the studentId and a connection string to the database
+            // The view model's constructor will work its magic
+            // Pass the new instance of the view model to the view
 
-                    Student student = new Student();
-
-                    if (reader.Read())
-                    {
-                        student = new Student
-                        {
-                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
-                            FirstName = reader.GetString(reader.GetOrdinal("FirstName")),
-                            LastName = reader.GetString(reader.GetOrdinal("LastName")),
-                            SlackHandle = reader.GetString(reader.GetOrdinal("SlackHandle")),
-                            CohortId = reader.GetInt32(reader.GetOrdinal("CohortId"))
-
-                        };
-                    }
-                    reader.Close();
-
-                    return View(student);
-                }
-            }
+            return View();
         }
 
         // POST: Students/Edit/5
@@ -192,29 +166,20 @@ namespace StudentExercisesWebApp.Controllers
         {
             try
             {
-                using (SqlConnection conn = Connection)
-                {
-                    conn.Open();
-                    using (SqlCommand cmd = conn.CreateCommand())
-                    {
-                        cmd.CommandText = @"UPDATE Student
+                // First, update the student's information, including their cohortId
 
-                                            SET firstName=@firstName, 
-                                            lastName=@lastName, 
-                                            slackHandle=@slackHandle, 
-                                            cohortId=@cohortId
-                                            WHERE Id = @id";
-                        cmd.Parameters.Add(new SqlParameter("@firstName", student.FirstName));
-                        cmd.Parameters.Add(new SqlParameter("@lastName", student.LastName));
-                        cmd.Parameters.Add(new SqlParameter("@slackHandle", student.SlackHandle));
-                        cmd.Parameters.Add(new SqlParameter("@cohortId", student.CohortId));
-                        cmd.Parameters.Add(new SqlParameter("@id", id));
+                // Now you have to deal with their exercises. You have a list of integers on your view model called SelectedExercises. These are the primary keys of the exercises the user selected from the multi-select.
 
-                        int rowsAffected = cmd.ExecuteNonQuery();
+                // But wait! Before you start creating new entries in our StudentExercises join table, what about the student's PREVIOUSLY assigned exercises? Let's say that Jane was assigned Chicken Monkey and Boy Bands, but then we went in and edited her and now we've assigned Kennel. How can we make sure that she's no longer assigned to Chicken Monkey and Boy Bands?
 
+                // The easiest way to do this is to DELETE all of the old entries in the join table with this student's Id and start fresh. This is a little nuclear, but it gets the job done in this case. 
 
-                    }
-                }
+                // Once you've deleted all the entries in the join table with this student's id (i.e. wiped out all their previously assigned exercises), you go can go about assigning new ones
+
+                // Loop over that list of integers INSERT a new entry into the join table for each one. Each entry will have the current exercise Id in the loop and the given studetn's Id. 
+
+                // Ta da!! Your student is edited.
+               
                 return RedirectToAction(nameof(Index));
             }
             catch
