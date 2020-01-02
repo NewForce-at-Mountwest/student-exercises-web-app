@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -9,41 +10,6 @@ namespace StudentExercisesWebApp.Models.ViewModels
 {
     public class StudentEditViewModel
     {
-        // --------------------- EDITING THE STUDENT ------------------------------//
-        // ---- What's the first thing the user needs to see ---- //
-        // All the info about a given student in pre-filled form fields
-
-        // ---- How can we get that information?--- //
-        // SELECT everything from Student where Id matches the id in the route
-
-        // ----Where should we store this info?----//
-        // We already have a custom Student type-- let's just add a property on this view model of type student and store the information from the DB there.
-
-
-        // ------------------------ EDITING THEIR EXERCISES -------------------------//
-
-        // ---- What does the user needs to see? ----//
-        // A multi-select of all the exercises. The ones they're currently working on should be pre-selected. 
-
-        // ---- How can we get this information? ---//
-        // First we can SELECT everything from the exercise table to get a list of ALL the available exercises. We also need to know which ones the student is currently working on. We can get that by joining in the student exercise table and looking for entries that match the given student's Id.
-
-        // ---- Where should we store this information? ----//
-        // We need to store two lists of exercises -- one for ALL of the exercises and one for the ones the student is currently working on. The list of all exercises needs to be a list of select list items. For the ones they're currently working on, we can use the AssignedExercises property on the Student model.
-
-
-        // ------------------- EDITING THEIR COHORT -------------------------//
-
-        // ----- What does the user need to see? -----//
-        // A select list of all the cohorts, with the student's current cohort pre-selected. 
-        // ----- How do we get this information? -----//
-        // First step- SELECT everything from the Cohort table
-        // Second step - figure out which cohort is assinged to this student (we may already have this information from the student's CohortId property
-
-        // ---- Where should we store this information? ----// 
-        // We'll need a list of select list items of all the cohorts. We can store the student's current cohort Id on this view models Student property. 
-
-
         public Student Student { get; set; }
 
         [Display(Name = "Exercises")]
@@ -51,25 +17,168 @@ namespace StudentExercisesWebApp.Models.ViewModels
 
         // We'll use this list of integers later, when the data comes back from the form.
         public List<int> SelectedExercises { get; set; }
+
         public List<SelectListItem> Cohorts { get; set; }
+
+        protected string _connectionString;
+
+        protected SqlConnection Connection
+        {
+            get
+            {
+                return new SqlConnection(_connectionString);
+            }
+        }
 
         public StudentEditViewModel() { }
 
         public StudentEditViewModel(int studentId, string connectionString)
         {
+            _connectionString = connectionString;
 
-        // Get the student's information from the db and assign it to the Student property
+            // Get the student's information and assign it to the Student property
+            Student = GetOneStudent(studentId);
 
-        // Get the exercises that are currently assigned to this student
+            // Get the exercises that are currently assigned to this student
+            Student.AssignedExercises = GetAssignedExercisesByStudent(studentId);
 
-        // Get ALL the exercises and convert them into a list of select list items
+            // Get ALL the exercises and convert them into a list of select list items
+            AllExercises = GetAllExercises().Select(singleExercise => new SelectListItem()
+            {
+                Text = singleExercise.Name,
+                Value = singleExercise.Id.ToString(),
+                Selected = Student.AssignedExercises.Any(assignedExercise => assignedExercise.Id == singleExercise.Id)
+            })
+            .ToList();
 
-        // Get ALL the cohorts and assign them to a list of select list items
-
-        // HINT: You can decide which options are pre-selected by adding a SELECTED property to the Select List Item instance -- https://docs.microsoft.com/en-us/dotnet/api/system.web.mvc.selectlistitem.selected?view=aspnet-mvc-5.2
+            // Get ALL the cohorts and assign them to a list of select list items
+            Cohorts = GetAllCohorts()
+               .Select(cohort => new SelectListItem()
+               {
+                   Text = cohort.Name,
+                   Value = cohort.Id.ToString(),
+                   Selected = Student.CohortId == cohort.Id
+               })
+               .ToList();
 
 
         }
 
+        private Student GetOneStudent(int id)
+        {
+            using (SqlConnection conn = Connection)
+            {
+                conn.Open();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"
+                        SELECT
+                            Id, FirstName, LastName, SlackHandle, CohortId
+                        FROM Student
+                        WHERE Id = @id";
+                    cmd.Parameters.Add(new SqlParameter("@id", id));
+                    SqlDataReader reader = cmd.ExecuteReader();
+
+                    Student student = null;
+
+                    if (reader.Read())
+                    {
+                        student = new Student
+                        {
+                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                            FirstName = reader.GetString(reader.GetOrdinal("FirstName")),
+                            LastName = reader.GetString(reader.GetOrdinal("LastName")),
+                            SlackHandle = reader.GetString(reader.GetOrdinal("SlackHandle")),
+                            CohortId = reader.GetInt32(reader.GetOrdinal("CohortId")),
+
+                        };
+                    }
+                    reader.Close();
+
+                    return student;
+                }
+            }
+
+        }
+
+        private List<Exercise> GetAssignedExercisesByStudent(int studentId)
+        {
+            List<Exercise> assignedExercises = new List<Exercise>();
+            using (SqlConnection conn = Connection)
+            {
+                conn.Open();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT e.Id, e.Name, e.Language FROM Exercise e JOIN StudentExercise se ON e.Id=se.ExerciseId WHERE se.StudentId=@id";
+
+                    cmd.Parameters.Add(new SqlParameter("@id", studentId));
+                    SqlDataReader reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        assignedExercises.Add(new Exercise
+                        {
+                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                            Name = reader.GetString(reader.GetOrdinal("Name")),
+                            Language = reader.GetString(reader.GetOrdinal("Language")),
+                        });
+                    }
+                    reader.Close();
+                }
+            }
+            return assignedExercises;
+        }
+
+        private List<Exercise> GetAllExercises()
+        {
+            List<Exercise> allExercises = new List<Exercise>();
+
+            using (SqlConnection conn = Connection)
+            {
+                conn.Open();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT Id, Name, Language FROM Exercise";
+                    SqlDataReader reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        allExercises.Add(new Exercise
+                        {
+                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                            Name = reader.GetString(reader.GetOrdinal("Name")),
+                            Language = reader.GetString(reader.GetOrdinal("Language")),
+                        });
+                    }
+                    reader.Close();
+                }
+            }
+            return allExercises;
+        }
+
+        private List<Cohort> GetAllCohorts()
+        {
+            using (SqlConnection conn = Connection)
+            {
+                conn.Open();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT Id, Name FROM Cohort";
+                    SqlDataReader reader = cmd.ExecuteReader();
+
+                    List<Cohort> cohorts = new List<Cohort>();
+                    while (reader.Read())
+                    {
+                        cohorts.Add(new Cohort
+                        {
+                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                            Name = reader.GetString(reader.GetOrdinal("Name")),
+                        });
+                    }
+
+                    reader.Close();
+
+                    return cohorts;
+                }
+            }
+        }
     }
 }
