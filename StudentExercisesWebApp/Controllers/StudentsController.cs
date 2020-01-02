@@ -168,40 +168,19 @@ namespace StudentExercisesWebApp.Controllers
         {
             try
             {
-                using (SqlConnection conn = Connection)
-                {
-                    conn.Open();
-                    using (SqlCommand cmd = conn.CreateCommand())
-                    {
+                // First, update the student's information, including their cohortId
 
-                        // First, update the student's information, including their cohortId
-                        // Wipe out all their previously assigned exercises in the join table
-                        string command = @"UPDATE Student
-                                            SET firstName=@firstName, 
-                                            lastName=@lastName, 
-                                            slackHandle=@slackHandle, 
-                                            cohortId=@cohortId
-                                            WHERE Id = @id
-                                            DELETE FROM StudentExercise WHERE studentId =@id";
+                // Now you have to deal with their exercises. You have a list of integers on your view model called SelectedExercises. These are the primary keys of the exercises the user selected from the multi-select.
 
-                        // Loop over the selected exercises and add a new entry for each exercise
-                        studentViewModel.SelectedExercises.ForEach(exerciseId =>
-                        {
-                            command += $" INSERT INTO StudentExercise (StudentId, ExerciseId) VALUES (@id, {exerciseId})";
+                // But wait! Before you start creating new entries in our StudentExercises join table, what about the student's PREVIOUSLY assigned exercises? Let's say that Jane was assigned Chicken Monkey and Boy Bands, but then we went in and edited her and now we've assigned Kennel. How can we make sure that she's no longer assigned to Chicken Monkey and Boy Bands?
 
-                        });
-                        cmd.CommandText = command;
-                        cmd.Parameters.Add(new SqlParameter("@firstName", studentViewModel.Student.FirstName));
-                        cmd.Parameters.Add(new SqlParameter("@lastName", studentViewModel.Student.LastName));
-                        cmd.Parameters.Add(new SqlParameter("@slackHandle", studentViewModel.Student.SlackHandle));
-                        cmd.Parameters.Add(new SqlParameter("@cohortId", studentViewModel.Student.CohortId));
-                        cmd.Parameters.Add(new SqlParameter("@id", id));
+                // The easiest way to do this is to DELETE all of the old entries in the join table with this student's Id and start fresh. This is a little nuclear, but it gets the job done in this case. 
 
-                        int rowsAffected = cmd.ExecuteNonQuery();
+                // Once you've deleted all the entries in the join table with this student's id (i.e. wiped out all their previously assigned exercises), you go can go about assigning new ones
 
-                    }
+                // Loop over that list of integers INSERT a new entry into the join table for each one. Each entry will have the current exercise Id in the loop and the given studetn's Id. 
 
-                }
+                // Ta da!! Your student is edited.
 
                 return RedirectToAction(nameof(Index));
             }
